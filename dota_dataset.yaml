@@ -1,0 +1,48 @@
+# DOTA航空目标检测数据集配置
+# 用于YOLOv12训练
+
+# 数据集路径（使用绝对路径）
+path: /Users/chengyiyang/Desktop/程序设计/Python/Caculate Study/yolov12/dataset  # 数据集根目录
+
+# 数据集分割
+train: images/train  # 训练集图像（相对于path）
+val: images/val      # 验证集图像（相对于path）
+test: images/test    # 测试集图像（可选）
+
+# 类别数量
+nc: 15
+
+# 类别名称
+names:
+  0: plane              # 飞机
+  1: ship               # 船舶
+  2: storage-tank       # 储罐
+  3: baseball-diamond   # 棒球场
+  4: tennis-court       # 网球场
+  5: basketball-court   # 篮球场
+  6: ground-track-field # 田径场
+  7: harbor             # 港口
+  8: bridge             # 桥梁
+  9: large-vehicle      # 大型车辆
+  10: small-vehicle     # 小型车辆
+  11: helicopter        # 直升机
+  12: roundabout        # 环形交叉路口
+  13: soccer-ball-field # 足球场
+  14: swimming-pool     # 游泳池
+
+# 数据增强参数（可选）
+# 可以根据需要调整这些参数
+augment: True
+hsv_h: 0.015  # 图像HSV-Hue增强（分数）
+hsv_s: 0.7    # 图像HSV-Saturation增强（分数）
+hsv_v: 0.4    # 图像HSV-Value增强（分数）
+degrees: 0.0  # 图像旋转（+/- deg）
+translate: 0.1 # 图像平移（+/- 分数）
+scale: 0.5    # 图像缩放（+/- gain）
+shear: 0.0    # 图像剪切（+/- deg）
+perspective: 0.0 # 图像透视（+/- 分数），范围0-0.001
+flipud: 0.0   # 图像上下翻转（概率）
+fliplr: 0.5   # 图像左右翻转（概率）
+mosaic: 1.0   # 图像马赛克（概率）
+mixup: 0.0    # 图像混合（概率）
+copy_paste: 0.0 # 段复制粘贴（概率）
