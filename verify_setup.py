@@ -17,11 +17,19 @@ def main():
     print("\n1. 检查环境...")
     print(f"   Python版本: {torch.__version__}")
     print(f"   PyTorch版本: {torch.__version__}")
+    
+    # 检查GPU支持
     print(f"   CUDA可用: {torch.cuda.is_available()}")
+    print(f"   MPS可用: {torch.backends.mps.is_available()}")
+    
     if torch.cuda.is_available():
-        print(f"   GPU数量: {torch.cuda.device_count()}")
+        print(f"   NVIDIA GPU数量: {torch.cuda.device_count()}")
         for i in range(torch.cuda.device_count()):
             print(f"   GPU {i}: {torch.cuda.get_device_name(i)}")
+    elif torch.backends.mps.is_available():
+        import platform
+        print(f"   Apple Silicon GPU: 可用")
+        print(f"   芯片架构: {platform.machine()}")
     
     # 2. 检查数据集配置
     print("\n2. 检查数据集配置...")
@@ -91,11 +99,17 @@ def main():
         gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1024**3
         if gpu_mem >= 8:
             batch_size = 16
-            print(f"   # GPU内存充足 ({gpu_mem:.1f}GB)，使用较大批次")
+            print(f"   # NVIDIA GPU内存充足 ({gpu_mem:.1f}GB)，使用较大批次")
         else:
             batch_size = 8
-            print(f"   # GPU内存有限 ({gpu_mem:.1f}GB)，使用较小批次")
+            print(f"   # NVIDIA GPU内存有限 ({gpu_mem:.1f}GB)，使用较小批次")
         device = "0"
+    elif torch.backends.mps.is_available():
+        # Apple Silicon GPU推荐参数
+        batch_size = 8
+        device = "mps"
+        print("   # 使用Apple Silicon GPU (MPS)训练")
+        print("   # 推荐批次大小: 8 (可根据内存调整)")
     else:
         batch_size = 4
         device = "cpu"

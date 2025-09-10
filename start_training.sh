@@ -24,12 +24,19 @@ python -c "import torch, ultralytics" 2>/dev/null || {
 
 # 检查GPU
 echo "检查GPU可用性..."
-python -c "import torch; print(f'GPU可用: {torch.cuda.is_available()}')"
+python -c "import torch; print(f'CUDA GPU可用: {torch.cuda.is_available()}')"
+python -c "import torch; print(f'Apple GPU (MPS)可用: {torch.backends.mps.is_available()}')"
+
 if python -c "import torch; exit(0 if torch.cuda.is_available() else 1)"; then
     gpu_count=$(python -c "import torch; print(torch.cuda.device_count())")
-    echo "发现 $gpu_count 个GPU"
+    echo "发现 $gpu_count 个NVIDIA GPU"
+    gpu_type="cuda"
+elif python -c "import torch; exit(0 if torch.backends.mps.is_available() else 1)"; then
+    echo "检测到Apple Silicon GPU (MPS)"
+    gpu_type="mps"
 else
     echo "⚠️ 未检测到GPU，将使用CPU训练（速度较慢）"
+    gpu_type="cpu"
 fi
 
 # 检查数据集
@@ -55,13 +62,45 @@ read -p "请选择 [1-5] (默认: 1): " choice
 choice=${choice:-1}
 
 case $choice in
-    1) model="yolov12n.pt"; batch=16 ;;
-    2) model="yolov12s.pt"; batch=12 ;;
-    3) model="yolov12m.pt"; batch=8 ;;
-    4) model="yolov12l.pt"; batch=6 ;;
-    5) model="yolov12x.pt"; batch=4 ;;
-    *) model="yolov12n.pt"; batch=16 ;;
+    1) model="yolov12n.pt" ;;
+    2) model="yolov12s.pt" ;;
+    3) model="yolov12m.pt" ;;
+    4) model="yolov12l.pt" ;;
+    5) model="yolov12x.pt" ;;
+    *) model="yolov12n.pt" ;;
 esac
+
+# 根据GPU类型调整批次大小
+if [ "$gpu_type" = "cuda" ]; then
+    case $choice in
+        1) batch=16 ;;
+        2) batch=12 ;;
+        3) batch=8 ;;
+        4) batch=6 ;;
+        5) batch=4 ;;
+        *) batch=16 ;;
+    esac
+elif [ "$gpu_type" = "mps" ]; then
+    # Apple Silicon GPU推荐较小批次
+    case $choice in
+        1) batch=12 ;;
+        2) batch=10 ;;
+        3) batch=8 ;;
+        4) batch=6 ;;
+        5) batch=4 ;;
+        *) batch=12 ;;
+    esac
+else
+    # CPU推荐最小批次
+    case $choice in
+        1) batch=4 ;;
+        2) batch=4 ;;
+        3) batch=2 ;;
+        4) batch=2 ;;
+        5) batch=2 ;;
+        *) batch=4 ;;
+    esac
+fi
 
 echo "选择的模型: $model, 批次大小: $batch"
 
@@ -70,11 +109,15 @@ read -p "训练轮数 (默认: 100): " epochs
 epochs=${epochs:-100}
 
 # 选择设备
-if python -c "import torch; exit(0 if torch.cuda.is_available() else 1)"; then
+if [ "$gpu_type" = "cuda" ]; then
     read -p "使用的GPU编号 (默认: 0): " device
     device=${device:-0}
+elif [ "$gpu_type" = "mps" ]; then
+    device="mps"
+    echo "自动使用Apple Silicon GPU (MPS)"
 else
     device="cpu"
+    echo "自动使用CPU"
 fi
 
 echo ""

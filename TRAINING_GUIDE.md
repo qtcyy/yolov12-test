@@ -37,18 +37,28 @@ yolov12/
 
 ### 方式2: Python脚本（推荐进阶用户）
 ```bash
-# 快速测试（10轮）
-python train_yolov12.py --epochs 10 --batch 4 --device cpu
+# Apple Silicon GPU训练（推荐）
+python train_yolov12.py --epochs 100 --batch 8 --device mps
 
-# 完整训练（100轮）
+# NVIDIA GPU训练
+python train_yolov12.py --epochs 100 --batch 16 --device 0
+
+# CPU训练
 python train_yolov12.py --epochs 100 --batch 4 --device cpu
 
-# 如果有GPU，使用GPU训练
-python train_yolov12.py --epochs 100 --batch 16 --device 0
+# 快速测试（10轮）
+python train_yolov12.py --epochs 10 --batch 8 --device mps
 ```
 
 ### 方式3: 直接使用YOLO命令
 ```bash
+# Apple Silicon GPU
+yolo train model=yolov12n.pt data=dota_dataset.yaml epochs=100 batch=8 device=mps
+
+# NVIDIA GPU
+yolo train model=yolov12n.pt data=dota_dataset.yaml epochs=100 batch=16 device=0
+
+# CPU
 yolo train model=yolov12n.pt data=dota_dataset.yaml epochs=100 batch=4 device=cpu
 ```
 
@@ -68,7 +78,10 @@ yolo train model=yolov12n.pt data=dota_dataset.yaml epochs=100 batch=4 device=cp
 - `--model`: 模型大小（yolov12n/s/m/l/x.pt）
 - `--epochs`: 训练轮数（建议100-300）
 - `--batch`: 批次大小（根据内存调整）
-- `--device`: 设备（0,1,2,3 for GPU, cpu for CPU）
+- `--device`: 设备
+  - `mps`: Apple Silicon GPU
+  - `0,1,2,3`: NVIDIA GPU编号
+  - `cpu`: CPU训练
 
 ### 优化参数
 - `--lr0`: 初始学习率（默认0.01）
@@ -165,12 +178,34 @@ yolo export model=runs/train/dota_yolov12_*/weights/best.pt format=engine half=t
 
 ## 🎯 性能优化建议
 
+### Apple Silicon GPU (MPS) 训练优化 🍎
+- **推荐模型**: YOLOv12n/s（轻量级）
+- **批次大小**: 8-12（根据内存调整）
+- **设备设置**: `--device mps`
+- **混合精度**: 支持但可能需要调整
+- **注意事项**: 
+  - MPS在某些操作上可能比CPU慢，建议先小规模测试
+  - 不支持多GPU并行训练
+  - 适合中小规模数据集和快速原型验证
+
+#### Apple Silicon 专用命令
+```bash
+# 使用Apple GPU训练（推荐）
+python train_yolov12.py --epochs 100 --batch 8 --device mps
+
+# 快速测试（10轮）
+python train_yolov12.py --epochs 10 --batch 8 --device mps
+
+# 使用交互式脚本（自动检测Apple GPU）
+./start_training.sh
+```
+
 ### CPU训练优化
 - 使用较小的模型（YOLOv12n/s）
 - 减小批次大小（4-8）
 - 启用OpenMP多线程
 
-### GPU训练优化
+### NVIDIA GPU训练优化
 - 使用混合精度训练（--amp True）
 - 适当增大批次大小
 - 使用多GPU并行（--device 0,1,2,3）

@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument('--imgsz', type=int, default=640,
                         help='训练图像大小')
     parser.add_argument('--device', type=str, default='0',
-                        help='训练设备 (0,1,2,3 或 cpu)')
+                        help='训练设备 (0,1,2,3 为CUDA GPU, mps 为Apple GPU, cpu 为CPU)')
     
     # 优化器参数
     parser.add_argument('--lr0', type=float, default=0.01,
@@ -182,10 +182,20 @@ def train():
     print("=" * 60)
     
     # 显示设备信息
-    if args.device != 'cpu':
+    if args.device == 'mps':
+        # Apple Silicon GPU (Metal Performance Shaders)
+        if torch.backends.mps.is_available():
+            print(f"\n使用Apple Silicon GPU (MPS)训练")
+            import platform
+            print(f"  芯片: Apple {platform.processor()}")
+            print(f"  架构: {platform.machine()}")
+        else:
+            print("\n⚠️ MPS不可用，将使用CPU训练")
+            args.device = 'cpu'
+    elif args.device != 'cpu':
         if torch.cuda.is_available():
             device_count = torch.cuda.device_count()
-            print(f"\n使用GPU训练:")
+            print(f"\n使用NVIDIA GPU训练:")
             for i in range(device_count):
                 print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
         else:
