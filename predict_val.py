@@ -524,9 +524,24 @@ def main():
                     print("  类别           mAP@0.5   mAP@0.5:0.95")
                     print("  " + "-" * 35)
                     
-                    # 获取各类别的AP值
-                    ap50 = val_results.box.ap50 if hasattr(val_results.box, 'ap50') else val_results.box.ap[:, 0]
-                    ap = val_results.box.ap.mean(1) if hasattr(val_results.box, 'ap') else [0]
+                    # 获取各类别的AP值 - 安全访问避免维度错误
+                    try:
+                        if hasattr(val_results.box, 'ap50'):
+                            ap50 = val_results.box.ap50
+                        elif hasattr(val_results.box, 'ap') and val_results.box.ap.ndim > 1:
+                            ap50 = val_results.box.ap[:, 0]  # mAP@0.5在第0列
+                        else:
+                            ap50 = [0] * len(val_results.box.ap_class_index)
+                        
+                        if hasattr(val_results.box, 'ap') and val_results.box.ap.ndim > 1:
+                            ap = val_results.box.ap.mean(1)  # 跨IoU阈值的平均值
+                        else:
+                            ap = [0] * len(val_results.box.ap_class_index)
+                    except (IndexError, AttributeError) as e:
+                        print(f"  ⚠️ AP值访问错误: {e}")
+                        print(f"  ⚠️ 这通常是因为预训练模型(80类)与自定义数据集(4类)不匹配")
+                        ap50 = [0] * len(val_results.box.ap_class_index) if hasattr(val_results.box, 'ap_class_index') else []
+                        ap = [0] * len(val_results.box.ap_class_index) if hasattr(val_results.box, 'ap_class_index') else []
                     
                     for i, class_idx in enumerate(val_results.box.ap_class_index):
                         class_idx = int(class_idx)
@@ -554,7 +569,14 @@ def main():
             print("可能的原因:")
             print("  1. 数据集配置文件格式错误")
             print("  2. 验证集标注文件缺失或格式不正确")
-            print("  3. 类别映射不匹配")
+            print("  3. 类别映射不匹配 (预训练模型80类 vs 自定义数据集4类)")
+            print("\n💡 建议解决方案:")
+            print("  方案1: 使用预测模式而非评价模式")
+            print("         python predict_val.py --filter_classes --save_images")
+            print("  方案2: 训练自定义模型后再评价")
+            print("         python train_yolov12.py --data coco_dataset.yaml")
+            print("         # 训练完成后使用自定义权重评价")
+            print("  方案3: 检查数据集配置文件路径和格式是否正确")
 
 
 if __name__ == "__main__":
