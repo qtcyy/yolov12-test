@@ -1,6 +1,7 @@
 # Dataset folder
 dataset/
 datasets/
+dataset*/
 
 # Python
 __pycache__/
