@@ -1,0 +1,35 @@
+# COCO-4类 目标检测数据集配置
+# 用于YOLOv12训练
+
+# 数据集路径
+path: /Users/chengyiyang/Desktop/程序设计/Python/Caculate Study/yolov12/dataset_yolo  # 数据集根目录
+
+# 数据集分割
+train: images/train  # 训练集图像（相对于path）
+val: images/val      # 验证集图像（相对于path）
+
+# 类别数量
+nc: 4
+
+# 类别名称
+names:
+  0: ship      # 船舶
+  1: people    # 人
+  2: car       # 汽车
+  3: motor     # 摩托车
+
+# 数据增强参数（针对4类小数据集优化）
+augment: True
+hsv_h: 0.015     # 图像HSV-Hue增强（分数）
+hsv_s: 0.7       # 图像HSV-Saturation增强（分数）
+hsv_v: 0.4       # 图像HSV-Value增强（分数）
+degrees: 0.0     # 图像旋转（+/- deg）
+translate: 0.1   # 图像平移（+/- 分数）
+scale: 0.5       # 图像缩放（+/- gain）
+shear: 0.0       # 图像剪切（+/- deg）
+perspective: 0.0 # 图像透视（+/- 分数）
+flipud: 0.0      # 图像上下翻转（概率）
+fliplr: 0.5      # 图像左右翻转（概率）
+mosaic: 1.0      # 图像马赛克（概率）
+mixup: 0.1       # 图像混合（概率）
+copy_paste: 0.1  # 段复制粘贴（概率）
