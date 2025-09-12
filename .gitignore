@@ -51,7 +51,6 @@ env/
 *.tflite
 *.pb
 *.mlmodel
-runs/
 wandb/
 
 # Logs
@@ -91,8 +90,6 @@ temp/
 *.avi
 *.mov
 *.mkv
-*.jpg
 *.jpeg
-*.png
 *.gif
 *.bmp
