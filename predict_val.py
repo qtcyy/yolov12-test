@@ -46,6 +46,17 @@ def parse_args():
         action="store_true",
         help="只显示目标类别（person,car,motorcycle,boat）",
     )
+    parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="计算mAP等评价指标（需要验证集标注）",
+    )
+    parser.add_argument(
+        "--data_config",
+        type=str,
+        default="coco_dataset.yaml",
+        help="用于评价的数据集配置文件",
+    )
 
     return parser.parse_args()
 
@@ -316,6 +327,9 @@ def main():
     print(f"  保存JSON: {args.save_json}")
     print(f"  保存TXT: {args.save_txt}")
     print(f"  类别过滤: {args.filter_classes}")
+    print(f"  评价模式: {args.evaluate}")
+    if args.evaluate:
+        print(f"  数据集配置: {args.data_config}")
 
     # 开始预测
     print(f"\n开始预测...")
@@ -328,6 +342,7 @@ def main():
         "class_counts": defaultdict(int),
         "processing_times": [],
         "start_time": time.time(),
+        "all_confidences": [],  # 独立收集置信度
     }
 
     # 存储所有JSON结果
@@ -357,6 +372,7 @@ def main():
 
                 for box in boxes:
                     cls = int(box.cls[0].cpu().numpy())
+                    conf = float(box.conf[0].cpu().numpy())
 
                     # 如果启用类别过滤，只统计目标类别  
                     if cls not in target_classes:
@@ -371,6 +387,7 @@ def main():
 
                     stats["total_detections"] += 1
                     stats["class_counts"][class_name] += 1
+                    stats["all_confidences"].append(conf)  # 收集置信度
 
             # 保存带标注的图像
             if args.save_images:
@@ -460,20 +477,84 @@ def main():
     if args.save_txt:
         print(f"  TXT标注: {output_dirs['txt']} ({len(image_files)} 个文件)")
 
-    print(f"\n🎯 平均置信度统计:")
-    if all_results:
-        all_confidences = []
-        for result in all_results:
-            for pred in result["predictions"]:
-                all_confidences.append(pred["confidence"])
-
-        if all_confidences:
-            avg_conf = sum(all_confidences) / len(all_confidences)
-            max_conf = max(all_confidences)
-            min_conf = min(all_confidences)
-            print(f"  平均置信度: {avg_conf:.3f}")
-            print(f"  最高置信度: {max_conf:.3f}")
-            print(f"  最低置信度: {min_conf:.3f}")
+    print(f"\n🎯 置信度统计:")
+    if stats["all_confidences"]:
+        confidences = stats["all_confidences"]
+        avg_conf = sum(confidences) / len(confidences)
+        max_conf = max(confidences)
+        min_conf = min(confidences)
+        print(f"  平均置信度: {avg_conf:.3f}")
+        print(f"  最高置信度: {max_conf:.3f}")
+        print(f"  最低置信度: {min_conf:.3f}")
+        print(f"  置信度样本数: {len(confidences)}")
+    else:
+        print("  无检测结果或被过滤")
+    
+    # 计算mAP等评价指标
+    if args.evaluate:
+        print(f"\n📈 模型评价指标:")
+        print("-" * 40)
+        
+        try:
+            # 检查数据集配置文件是否存在
+            if not Path(args.data_config).exists():
+                print(f"❌ 错误: 数据集配置文件不存在 {args.data_config}")
+                print("   请确保配置文件路径正确")
+            else:
+                print(f"正在使用 {args.data_config} 进行模型评价...")
+                
+                # 使用YOLO内置的验证功能
+                val_results = model.val(
+                    data=args.data_config,
+                    conf=args.conf,
+                    iou=args.iou,
+                    device=args.device,
+                    verbose=False
+                )
+                
+                print(f"\n📊 总体指标:")
+                print(f"  mAP@0.5     : {val_results.box.map50:.4f}")
+                print(f"  mAP@0.5:0.95: {val_results.box.map:.4f}")
+                print(f"  Precision   : {val_results.box.mp:.4f}")
+                print(f"  Recall      : {val_results.box.mr:.4f}")
+                
+                # 各类别详细指标
+                if hasattr(val_results.box, 'ap_class_index') and len(val_results.box.ap_class_index) > 0:
+                    print(f"\n📋 各类别指标:")
+                    print("  类别           mAP@0.5   mAP@0.5:0.95")
+                    print("  " + "-" * 35)
+                    
+                    # 获取各类别的AP值
+                    ap50 = val_results.box.ap50 if hasattr(val_results.box, 'ap50') else val_results.box.ap[:, 0]
+                    ap = val_results.box.ap.mean(1) if hasattr(val_results.box, 'ap') else [0]
+                    
+                    for i, class_idx in enumerate(val_results.box.ap_class_index):
+                        class_idx = int(class_idx)
+                        if class_idx in coco_to_custom:
+                            custom_id = coco_to_custom[class_idx]
+                            class_name = class_names[custom_id]
+                            ap50_val = ap50[i] if i < len(ap50) else 0
+                            ap_val = ap[i] if i < len(ap) else 0
+                            print(f"  {class_name:<12} {ap50_val:>8.4f}   {ap_val:>10.4f}")
+                
+                # 计算F1分数
+                if val_results.box.mp > 0 and val_results.box.mr > 0:
+                    f1 = 2 * (val_results.box.mp * val_results.box.mr) / (val_results.box.mp + val_results.box.mr)
+                    print(f"\n  F1-Score    : {f1:.4f}")
+                
+                print(f"\n💡 评价说明:")
+                print(f"  - mAP@0.5: IoU阈值0.5时的平均精度")
+                print(f"  - mAP@0.5:0.95: IoU阈值0.5-0.95的平均精度")
+                print(f"  - Precision: 精确率（检测正确的比例）")
+                print(f"  - Recall: 召回率（实际目标被检测到的比例）")
+                print(f"  - F1-Score: 精确率和召回率的调和平均")
+                
+        except Exception as e:
+            print(f"❌ 评价过程中出错: {e}")
+            print("可能的原因:")
+            print("  1. 数据集配置文件格式错误")
+            print("  2. 验证集标注文件缺失或格式不正确")
+            print("  3. 类别映射不匹配")
 
 
 if __name__ == "__main__":
