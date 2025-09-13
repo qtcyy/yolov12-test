@@ -2,6 +2,7 @@
 dataset/
 datasets/
 dataset*/
+predictions/
 
 # Python
 __pycache__/

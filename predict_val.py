@@ -15,7 +15,7 @@ def parse_args():
 
     # 模型和数据参数
     parser.add_argument(
-        "--model", type=str, default="yolov12n.pt", help="预训练模型路径"
+        "--model", type=str, default="best.pt", help="预训练模型路径"
     )
     parser.add_argument(
         "--val_dir", type=str, default="dataset_yolo/images/val", help="验证集图像目录"
@@ -26,7 +26,7 @@ def parse_args():
 
     # 预测参数
     parser.add_argument("--conf", type=float, default=0.25, help="置信度阈值")
-    parser.add_argument("--iou", type=float, default=0.7, help="NMS IoU阈值")
+    parser.add_argument("--iou", type=float, default=0.1, help="NMS IoU阈值")
     parser.add_argument("--imgsz", type=int, default=640, help="推理图像大小")
     parser.add_argument(
         "--device", type=str, default="cpu", help="推理设备 (0,1,2,3,cpu,mps)"
@@ -79,7 +79,12 @@ def setup_output_dirs(output_dir):
 
 
 def draw_predictions(
-    image, results, class_names, target_classes=None, filter_classes=False, coco_to_custom=None
+        image,
+        results,
+        class_names,
+        target_classes=None,
+        filter_classes=False,
+        coco_to_custom=None,
 ):
     """在图像上绘制预测框"""
     img_draw = image.copy()
@@ -146,7 +151,12 @@ def get_class_color(class_id):
 
 
 def results_to_json(
-    results, image_name, class_names, target_classes=None, filter_classes=False, coco_to_custom=None
+        results,
+        image_name,
+        class_names,
+        target_classes=None,
+        filter_classes=False,
+        coco_to_custom=None,
 ):
     """将预测结果转换为JSON格式"""
     predictions = []
@@ -186,7 +196,9 @@ def results_to_json(
     return {"image": image_name, "predictions": predictions}
 
 
-def results_to_txt(results, target_classes=None, filter_classes=False, coco_to_custom=None):
+def results_to_txt(
+        results, target_classes=None, filter_classes=False, coco_to_custom=None
+):
     """将预测结果转换为YOLO TXT格式"""
     lines = []
 
@@ -282,20 +294,15 @@ def main():
 
     # COCO类别到您的数据集类别的映射
     coco_to_custom = {
-        0: 0,   # person -> people
-        2: 1,   # car -> car  
-        3: 2,   # motorcycle -> motor
-        8: 3    # boat -> ship
+        0: 0,  # person -> people
+        2: 1,  # car -> car
+        3: 2,  # motorcycle -> motor
+        8: 3,  # boat -> ship
     }
-    
+
     # 您的4类数据集的类别名称
-    class_names = {
-        0: "people",
-        1: "car", 
-        2: "motor",
-        3: "ship"
-    }
-    
+    class_names = {0: "people", 1: "car", 2: "motor", 3: "ship"}
+
     # 目标类别（COCO中您关心的类别ID）
     target_classes = {0, 2, 3, 8}  # person, car, motorcycle, boat
 
@@ -374,7 +381,7 @@ def main():
                     cls = int(box.cls[0].cpu().numpy())
                     conf = float(box.conf[0].cpu().numpy())
 
-                    # 如果启用类别过滤，只统计目标类别  
+                    # 如果启用类别过滤，只统计目标类别
                     if cls not in target_classes:
                         if args.filter_classes:
                             continue
@@ -394,7 +401,12 @@ def main():
                 image = cv2.imread(str(image_path))
                 if image is not None:
                     annotated_image = draw_predictions(
-                        image, results, class_names, target_classes, args.filter_classes, coco_to_custom
+                        image,
+                        results,
+                        class_names,
+                        target_classes,
+                        args.filter_classes,
+                        coco_to_custom,
                     )
                     output_path = output_dirs["images"] / f"{stem_name}_pred.jpg"
                     cv2.imwrite(str(output_path), annotated_image)
@@ -407,13 +419,15 @@ def main():
                     class_names,
                     target_classes,
                     args.filter_classes,
-                    coco_to_custom
+                    coco_to_custom,
                 )
                 all_results.append(json_result)
 
             # 保存TXT结果
             if args.save_txt:
-                txt_lines = results_to_txt(results, target_classes, args.filter_classes, coco_to_custom)
+                txt_lines = results_to_txt(
+                    results, target_classes, args.filter_classes, coco_to_custom
+                )
                 txt_path = output_dirs["txt"] / f"{stem_name}.txt"
                 with open(txt_path, "w") as f:
                     f.write("\n".join(txt_lines))
@@ -453,7 +467,7 @@ def main():
     print(f"  处理图像数量: {stats['total_images']}")
     print(f"  总检测数量: {stats['total_detections']}")
     print(
-        f"  平均每张图像: {stats['total_detections']/stats['total_images']:.2f} 个目标"
+        f"  平均每张图像: {stats['total_detections'] / stats['total_images']:.2f} 个目标"
     )
     print(f"  总处理时间: {total_time:.2f} 秒")
     print(f"  平均处理时间: {avg_time:.3f} 秒/张")
@@ -489,12 +503,12 @@ def main():
         print(f"  置信度样本数: {len(confidences)}")
     else:
         print("  无检测结果或被过滤")
-    
+
     # 计算mAP等评价指标
-    if args.evaluate:
+    if not args.evaluate:
         print(f"\n📈 模型评价指标:")
         print("-" * 40)
-        
+
         try:
             # 检查数据集配置文件是否存在
             if not Path(args.data_config).exists():
@@ -502,47 +516,70 @@ def main():
                 print("   请确保配置文件路径正确")
             else:
                 print(f"正在使用 {args.data_config} 进行模型评价...")
-                
+
+                print("before model validate")
+
                 # 使用YOLO内置的验证功能
                 val_results = model.val(
                     data=args.data_config,
                     conf=args.conf,
                     iou=args.iou,
                     device=args.device,
-                    verbose=False
+                    verbose=False,
                 )
-                
+
+                print("after")
+
                 print(f"\n📊 总体指标:")
                 print(f"  mAP@0.5     : {val_results.box.map50:.4f}")
                 print(f"  mAP@0.5:0.95: {val_results.box.map:.4f}")
                 print(f"  Precision   : {val_results.box.mp:.4f}")
                 print(f"  Recall      : {val_results.box.mr:.4f}")
-                
+
                 # 各类别详细指标
-                if hasattr(val_results.box, 'ap_class_index') and len(val_results.box.ap_class_index) > 0:
+                if (
+                        hasattr(val_results.box, "ap_class_index")
+                        and len(val_results.box.ap_class_index) > 0
+                ):
                     print(f"\n📋 各类别指标:")
                     print("  类别           mAP@0.5   mAP@0.5:0.95")
                     print("  " + "-" * 35)
-                    
+
                     # 获取各类别的AP值 - 安全访问避免维度错误
                     try:
-                        if hasattr(val_results.box, 'ap50'):
+                        if hasattr(val_results.box, "ap50"):
                             ap50 = val_results.box.ap50
-                        elif hasattr(val_results.box, 'ap') and val_results.box.ap.ndim > 1:
+                        elif (
+                                hasattr(val_results.box, "ap")
+                                and val_results.box.ap.ndim > 1
+                        ):
                             ap50 = val_results.box.ap[:, 0]  # mAP@0.5在第0列
                         else:
                             ap50 = [0] * len(val_results.box.ap_class_index)
-                        
-                        if hasattr(val_results.box, 'ap') and val_results.box.ap.ndim > 1:
+
+                        if (
+                                hasattr(val_results.box, "ap")
+                                and val_results.box.ap.ndim > 1
+                        ):
                             ap = val_results.box.ap.mean(1)  # 跨IoU阈值的平均值
                         else:
                             ap = [0] * len(val_results.box.ap_class_index)
                     except (IndexError, AttributeError) as e:
                         print(f"  ⚠️ AP值访问错误: {e}")
-                        print(f"  ⚠️ 这通常是因为预训练模型(80类)与自定义数据集(4类)不匹配")
-                        ap50 = [0] * len(val_results.box.ap_class_index) if hasattr(val_results.box, 'ap_class_index') else []
-                        ap = [0] * len(val_results.box.ap_class_index) if hasattr(val_results.box, 'ap_class_index') else []
-                    
+                        print(
+                            f"  ⚠️ 这通常是因为预训练模型(80类)与自定义数据集(4类)不匹配"
+                        )
+                        ap50 = (
+                            [0] * len(val_results.box.ap_class_index)
+                            if hasattr(val_results.box, "ap_class_index")
+                            else []
+                        )
+                        ap = (
+                            [0] * len(val_results.box.ap_class_index)
+                            if hasattr(val_results.box, "ap_class_index")
+                            else []
+                        )
+
                     for i, class_idx in enumerate(val_results.box.ap_class_index):
                         class_idx = int(class_idx)
                         if class_idx in coco_to_custom:
@@ -550,20 +587,26 @@ def main():
                             class_name = class_names[custom_id]
                             ap50_val = ap50[i] if i < len(ap50) else 0
                             ap_val = ap[i] if i < len(ap) else 0
-                            print(f"  {class_name:<12} {ap50_val:>8.4f}   {ap_val:>10.4f}")
-                
+                            print(
+                                f"  {class_name:<12} {ap50_val:>8.4f}   {ap_val:>10.4f}"
+                            )
+
                 # 计算F1分数
                 if val_results.box.mp > 0 and val_results.box.mr > 0:
-                    f1 = 2 * (val_results.box.mp * val_results.box.mr) / (val_results.box.mp + val_results.box.mr)
+                    f1 = (
+                            2
+                            * (val_results.box.mp * val_results.box.mr)
+                            / (val_results.box.mp + val_results.box.mr)
+                    )
                     print(f"\n  F1-Score    : {f1:.4f}")
-                
+
                 print(f"\n💡 评价说明:")
                 print(f"  - mAP@0.5: IoU阈值0.5时的平均精度")
                 print(f"  - mAP@0.5:0.95: IoU阈值0.5-0.95的平均精度")
                 print(f"  - Precision: 精确率（检测正确的比例）")
                 print(f"  - Recall: 召回率（实际目标被检测到的比例）")
                 print(f"  - F1-Score: 精确率和召回率的调和平均")
-                
+
         except Exception as e:
             print(f"❌ 评价过程中出错: {e}")
             print("可能的原因:")
