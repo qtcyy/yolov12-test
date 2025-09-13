@@ -57,6 +57,11 @@ def parse_args():
         default="coco_dataset.yaml",
         help="用于评价的数据集配置文件",
     )
+    parser.add_argument(
+        "--custom_model",
+        action="store_true",
+        help="使用自定义训练的4类模型（而非COCO预训练模型）",
+    )
 
     return parser.parse_args()
 
@@ -85,6 +90,7 @@ def draw_predictions(
         target_classes=None,
         filter_classes=False,
         coco_to_custom=None,
+        custom_model=False,
 ):
     """在图像上绘制预测框"""
     img_draw = image.copy()
@@ -97,23 +103,36 @@ def draw_predictions(
             conf = box.conf[0].cpu().numpy()
             cls = int(box.cls[0].cpu().numpy())
 
-            # 如果启用类别过滤或者类别不在目标类别中，跳过
-            if cls not in target_classes:
-                if filter_classes:
-                    continue
+            if custom_model:
+                # 自定义模型：直接使用类别ID
+                if cls in class_names:
+                    class_name = class_names[cls]
+                    custom_id = cls
                 else:
-                    # 如果不过滤，显示为unknown
+                    if filter_classes:
+                        continue
                     class_name = f"unknown_{cls}"
+                    custom_id = cls
             else:
-                # 转换为自定义类别名称
-                if coco_to_custom:
-                    custom_id = coco_to_custom[cls]
-                    class_name = class_names[custom_id]
+                # COCO预训练模型：需要映射
+                if cls not in target_classes:
+                    if filter_classes:
+                        continue
+                    else:
+                        # 如果不过滤，显示为unknown
+                        class_name = f"unknown_{cls}"
+                        custom_id = cls
                 else:
-                    class_name = f"class_{cls}"
+                    # 转换为自定义类别名称
+                    if coco_to_custom:
+                        custom_id = coco_to_custom[cls]
+                        class_name = class_names[custom_id]
+                    else:
+                        class_name = f"class_{cls}"
+                        custom_id = cls
 
-            # 绘制边界框
-            color = get_class_color(cls)
+            # 绘制边界框（使用转换后的custom_id作为颜色索引）
+            color = get_class_color(custom_id)
             cv2.rectangle(img_draw, (x1, y1), (x2, y2), color, 2)
 
             # 绘制标签
@@ -142,10 +161,10 @@ def draw_predictions(
 def get_class_color(class_id):
     """获取类别颜色"""
     colors = [
-        (0, 255, 255),  # ship - 青色
-        (255, 0, 255),  # people - 紫色
-        (255, 255, 0),  # car - 黄色
-        (0, 255, 0),  # motor - 绿色
+        (0, 255, 255),  # 0: ship - 青色
+        (255, 0, 255),  # 1: people - 紫色
+        (255, 255, 0),  # 2: car - 黄色
+        (0, 255, 0),  # 3: motor - 绿色
     ]
     return colors[class_id % len(colors)]
 
@@ -157,6 +176,7 @@ def results_to_json(
         target_classes=None,
         filter_classes=False,
         coco_to_custom=None,
+        custom_model=False,
 ):
     """将预测结果转换为JSON格式"""
     predictions = []
@@ -168,28 +188,39 @@ def results_to_json(
             conf = float(box.conf[0].cpu().numpy())
             cls = int(box.cls[0].cpu().numpy())
 
-            # 如果启用类别过滤或者类别不在目标类别中，跳过
-            if cls not in target_classes:
-                if filter_classes:
-                    continue
-                else:
-                    class_name = f"unknown_{cls}"
-                    custom_id = cls  # 保持原始ID
-            else:
-                # 转换为自定义类别
-                if coco_to_custom:
-                    custom_id = coco_to_custom[cls]
-                    class_name = class_names[custom_id]
-                else:
+            if custom_model:
+                # 自定义模型：直接使用类别ID
+                if cls in class_names:
+                    class_name = class_names[cls]
                     custom_id = cls
-                    class_name = f"class_{cls}"
+                else:
+                    if filter_classes:
+                        continue
+                    class_name = f"unknown_{cls}"
+                    custom_id = cls
+            else:
+                # COCO预训练模型：需要映射
+                if cls not in target_classes:
+                    if filter_classes:
+                        continue
+                    else:
+                        class_name = f"unknown_{cls}"
+                        custom_id = cls  # 保持原始ID
+                else:
+                    # 转换为自定义类别
+                    if coco_to_custom:
+                        custom_id = coco_to_custom[cls]
+                        class_name = class_names[custom_id]
+                    else:
+                        custom_id = cls
+                        class_name = f"class_{cls}"
 
             prediction = {
                 "bbox": [float(x1), float(y1), float(x2), float(y2)],
                 "confidence": conf,
                 "class_id": custom_id,  # 使用转换后的类别ID
                 "class_name": class_name,
-                "original_class_id": cls,  # 保留原始COCO类别ID
+                "original_class_id": cls,  # 保留原始类别ID
             }
             predictions.append(prediction)
 
@@ -197,7 +228,7 @@ def results_to_json(
 
 
 def results_to_txt(
-        results, target_classes=None, filter_classes=False, coco_to_custom=None
+        results, target_classes=None, filter_classes=False, coco_to_custom=None, custom_model=False, class_names=None
 ):
     """将预测结果转换为YOLO TXT格式"""
     lines = []
@@ -211,18 +242,27 @@ def results_to_txt(
             conf = float(box.conf[0].cpu().numpy())
             cls = int(box.cls[0].cpu().numpy())
 
-            # 如果启用类别过滤，只保存目标类别
-            if cls not in target_classes:
-                if filter_classes:
-                    continue
-                else:
-                    custom_id = cls  # 保持原始ID
-            else:
-                # 转换为自定义类别ID
-                if coco_to_custom:
-                    custom_id = coco_to_custom[cls]
-                else:
+            if custom_model:
+                # 自定义模型：直接使用类别ID
+                if class_names and cls in class_names:
                     custom_id = cls
+                else:
+                    if filter_classes:
+                        continue
+                    custom_id = cls
+            else:
+                # COCO预训练模型：需要映射
+                if cls not in target_classes:
+                    if filter_classes:
+                        continue
+                    else:
+                        custom_id = cls  # 保持原始ID
+                else:
+                    # 转换为自定义类别ID
+                    if coco_to_custom:
+                        custom_id = coco_to_custom[cls]
+                    else:
+                        custom_id = cls
 
             # 转换为YOLO格式（中心点坐标，归一化）
             x_center = ((x1 + x2) / 2) / img_width
@@ -294,14 +334,14 @@ def main():
 
     # COCO类别到您的数据集类别的映射
     coco_to_custom = {
-        0: 0,  # person -> people
-        2: 1,  # car -> car
-        3: 2,  # motorcycle -> motor
-        8: 3,  # boat -> ship
+        8: 0,  # boat -> ship
+        0: 1,  # person -> people
+        2: 2,  # car -> car
+        3: 3,  # motorcycle -> motor
     }
 
-    # 您的4类数据集的类别名称
-    class_names = {0: "people", 1: "car", 2: "motor", 3: "ship"}
+    # 您的4类数据集的类别名称（与coco_dataset.yaml一致）
+    class_names = {0: "ship", 1: "people", 2: "car", 3: "motor"}
 
     # 目标类别（COCO中您关心的类别ID）
     target_classes = {0, 2, 3, 8}  # person, car, motorcycle, boat
@@ -330,6 +370,7 @@ def main():
     print(f"  IoU阈值: {args.iou}")
     print(f"  图像大小: {args.imgsz}")
     print(f"  设备: {args.device}")
+    print(f"  模型类型: {'自定义4类模型' if args.custom_model else 'COCO预训练模型'}")
     print(f"  保存图像: {args.save_images}")
     print(f"  保存JSON: {args.save_json}")
     print(f"  保存TXT: {args.save_txt}")
@@ -381,16 +422,25 @@ def main():
                     cls = int(box.cls[0].cpu().numpy())
                     conf = float(box.conf[0].cpu().numpy())
 
-                    # 如果启用类别过滤，只统计目标类别
-                    if cls not in target_classes:
-                        if args.filter_classes:
-                            continue
+                    if args.custom_model:
+                        # 自定义模型：直接使用类别ID
+                        if cls in class_names:
+                            class_name = class_names[cls]
                         else:
+                            if args.filter_classes:
+                                continue
                             class_name = f"unknown_{cls}"
                     else:
-                        # 转换为自定义类别名称
-                        custom_id = coco_to_custom[cls]
-                        class_name = class_names[custom_id]
+                        # COCO预训练模型：需要映射
+                        if cls not in target_classes:
+                            if args.filter_classes:
+                                continue
+                            else:
+                                class_name = f"unknown_{cls}"
+                        else:
+                            # 转换为自定义类别名称
+                            custom_id = coco_to_custom[cls]
+                            class_name = class_names[custom_id]
 
                     stats["total_detections"] += 1
                     stats["class_counts"][class_name] += 1
@@ -407,6 +457,7 @@ def main():
                         target_classes,
                         args.filter_classes,
                         coco_to_custom,
+                        args.custom_model,
                     )
                     output_path = output_dirs["images"] / f"{stem_name}_pred.jpg"
                     cv2.imwrite(str(output_path), annotated_image)
@@ -420,13 +471,14 @@ def main():
                     target_classes,
                     args.filter_classes,
                     coco_to_custom,
+                    args.custom_model,
                 )
                 all_results.append(json_result)
 
             # 保存TXT结果
             if args.save_txt:
                 txt_lines = results_to_txt(
-                    results, target_classes, args.filter_classes, coco_to_custom
+                    results, target_classes, args.filter_classes, coco_to_custom, args.custom_model, class_names
                 )
                 txt_path = output_dirs["txt"] / f"{stem_name}.txt"
                 with open(txt_path, "w") as f:
